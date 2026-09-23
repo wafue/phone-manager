@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>电话号码管理系统</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>电话号码管理系统</h1>
+
+        <div class="upload-box">
+            <h3>上传Excel文件</h3>
+            <input type="file" id="excel-file" accept=".xlsx">
+            <button id="upload-btn" class="btn-primary">上传导入</button>
+            <span id="upload-status"></span>
+        </div>
+
+        <div class="filter-bar">
+            <input type="text" id="search-input" placeholder="模糊搜索：国家 / 地区 / 号码...">
+            <select id="status-filter">
+                <option value="all">全部状态</option>
+                <option value="未使用">未使用</option>
+                <option value="已使用">已使用</option>
+            </select>
+        </div>
+
+        <div class="table-wrapper">
+        <table id="phone-table">
+            <thead>
+                <tr>
+                    <th class="col-index">索引</th>
+                    <th>国家</th>
+                    <th class="col-region">地区</th>
+                    <th>号码</th>
+                    <th>状态</th>
+                    <th class="col-time">使用时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+        </table>
+        </div>
+
+        <div class="pagination-bar">
+            <div class="page-info">
+                第 <strong id="current-page">1</strong> 页 / 共 <strong id="total-pages">1</strong> 页
+                &nbsp; （ <strong id="page-total">0</strong> 条记录 ）
+            </div>
+            <div class="page-controls">
+                <select id="page-size-select">
+                    <option value="10">10 条/页</option>
+                    <option value="20">20 条/页</option>
+                    <option value="50">50 条/页</option>
+                </select>
+                <button id="first-btn" title="首页">首页</button>
+                <button id="prev-btn" title="上一页">上一页</button>
+                <span id="page-numbers"></span>
+                <button id="next-btn" title="下一页">下一页</button>
+                <button id="last-btn" title="末页">末页</button>
+            </div>
+        </div>
+
+        <div class="stats-bar">
+            <span>总计: <strong id="total-count">0</strong></span>
+            <span>未使用: <strong id="new-count">0</strong></span>
+            <span>已使用: <strong id="used-count">0</strong></span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
