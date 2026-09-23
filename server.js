@@ -8,6 +8,9 @@ const fs = require('fs/promises');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || '';
+const USE_JSON_STORE = process.env.USE_JSON_STORE === '1' || (!process.env.MYSQLHOST && !process.env.MYSQL_HOST);
+const JSON_DB_PATH = path.join(__dirname, 'data', 'numbers.json');
+const VIETNAM_SEED_PATH = path.join(__dirname, 'data', 'vietnam-hardware.json');
 
 // MySQL connection pool compatible with Railway variables.
 const pool = mysql.createPool({
@@ -56,8 +59,30 @@ app.get('/api/numbers', async (req, res) => {
     const pageSize = parseInt(req.query.pageSize) || 10;
     const keyword = (req.query.keyword || '').trim();
     const status = req.query.status || 'all';
-    const offset = (page - 1) * pageSize;
 
+    if (USE_JSON_STORE) {
+      const numbers = await loadJsonNumbers();
+      const filtered = filterNumbers(numbers, keyword, status);
+      const start = (page - 1) * pageSize;
+      const list = filtered.slice(start, start + pageSize).map(formatJsonNumber);
+      const unused = numbers.filter((item) => item.status === '未使用').length;
+      const used = numbers.filter((item) => item.status === '已使用').length;
+
+      return res.json({
+        code: 0,
+        data: {
+          list,
+          total: filtered.length,
+          unused,
+          used,
+          page,
+          pageSize,
+          totalPages: Math.ceil(filtered.length / pageSize),
+        },
+      });
+    }
+
+    const offset = (page - 1) * pageSize;
     const where = [];
     const params = [];
 
@@ -114,6 +139,18 @@ app.get('/api/numbers', async (req, res) => {
 
 app.put('/api/numbers/:id/use', async (req, res) => {
   try {
+    if (USE_JSON_STORE) {
+      const numbers = await loadJsonNumbers();
+      const item = numbers.find((row) => row.id === Number(req.params.id));
+      if (!item) {
+        return res.status(404).json({ code: 1, message: '号码不存在' });
+      }
+      item.status = '已使用';
+      item.used_time = new Date().toISOString();
+      await saveJsonNumbers(numbers);
+      return res.json({ code: 0, message: '已标记为已使用' });
+    }
+
     const [result] = await pool.query(
       'UPDATE phone_numbers SET status = \'已使用\', used_time = NOW() WHERE id = ?',
       [req.params.id]
@@ -141,6 +178,16 @@ app.post('/api/numbers/upload', upload.single('file'), async (req, res) => {
 
     if (data.length === 0) {
       return res.status(400).json({ code: 1, message: 'Excel 无数据' });
+    }
+
+    if (USE_JSON_STORE) {
+      const result = await importRowsToJson(data);
+      return res.json({
+        code: 0,
+        message: `导入完成：新增 ${result.inserted} 条，跳过 ${result.skipped} 条`,
+        inserted: result.inserted,
+        skipped: result.skipped,
+      });
     }
 
     let inserted = 0;
@@ -186,6 +233,84 @@ app.post('/api/numbers/upload', upload.single('file'), async (req, res) => {
     }
   }
 });
+
+async function loadJsonNumbers() {
+  await fs.mkdir(path.dirname(JSON_DB_PATH), { recursive: true });
+  try {
+    return JSON.parse(await fs.readFile(JSON_DB_PATH, 'utf8'));
+  } catch (error) {
+    const seed = JSON.parse(await fs.readFile(VIETNAM_SEED_PATH, 'utf8'));
+    const numbers = seed.map((row, index) => ({
+      id: index + 1,
+      country: row.country,
+      region: row.region,
+      number: row.number,
+      status: '未使用',
+      used_time: null,
+      created_at: new Date().toISOString(),
+    }));
+    await saveJsonNumbers(numbers);
+    return numbers;
+  }
+}
+
+async function saveJsonNumbers(numbers) {
+  await fs.mkdir(path.dirname(JSON_DB_PATH), { recursive: true });
+  await fs.writeFile(JSON_DB_PATH, JSON.stringify(numbers, null, 2));
+}
+
+function filterNumbers(numbers, keyword, status) {
+  return numbers.filter((item) => {
+    const matchesKeyword = !keyword ||
+      item.country.includes(keyword) ||
+      item.region.includes(keyword) ||
+      item.number.includes(keyword);
+    const matchesStatus = !status || status === 'all' || item.status === status;
+    return matchesKeyword && matchesStatus;
+  });
+}
+
+function formatJsonNumber(item) {
+  return {
+    id: item.id,
+    country: item.country,
+    region: item.region,
+    number: item.number,
+    status: item.status,
+    used_time: item.used_time ? item.used_time.slice(0, 16).replace('T', ' ') : '-',
+  };
+}
+
+async function importRowsToJson(data) {
+  const numbers = await loadJsonNumbers();
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const row of data) {
+    const country = (row['国家'] || row.country || '').toString().trim();
+    const region = (row['地区'] || row.region || '').toString().trim();
+    const number = (row['号码'] || row.number || '').toString().trim();
+
+    if (!number || numbers.some((item) => item.number === number)) {
+      skipped++;
+      continue;
+    }
+
+    numbers.push({
+      id: numbers.reduce((max, item) => Math.max(max, item.id), 0) + 1,
+      country,
+      region,
+      number,
+      status: '未使用',
+      used_time: null,
+      created_at: new Date().toISOString(),
+    });
+    inserted++;
+  }
+
+  await saveJsonNumbers(numbers);
+  return { inserted, skipped };
+}
 
 function sheetToRows(sheet) {
   const headerRow = sheet.getRow(1);
