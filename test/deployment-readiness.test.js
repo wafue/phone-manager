@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const sql = fs.readFileSync('sql/init.sql', 'utf8');
 const server = fs.readFileSync('server.js', 'utf8');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const vietnamHardware = JSON.parse(fs.readFileSync('data/vietnam-hardware.json', 'utf8'));
 
 test('Railway SQL uses the injected database without destructive statements', () => {
   assert.doesNotMatch(sql, /\bCREATE\s+DATABASE\b/i);
@@ -27,4 +28,12 @@ test('Excel import avoids the vulnerable xlsx package', () => {
   assert.ok(pkg.dependencies.exceljs);
   assert.equal(pkg.dependencies.xlsx, undefined);
   assert.doesNotMatch(server, /require\('xlsx'\)/);
+});
+
+test('Vietnam hardware seed data is ready for fallback import', () => {
+  assert.equal(vietnamHardware.length, 20);
+  assert.ok(vietnamHardware.every((row) => row.country === '越南'));
+  assert.ok(vietnamHardware.every((row) => row.region && row.number));
+  assert.match(server, /vietnam-hardware\.json/);
+  assert.match(server, /loadJsonNumbers/);
 });
