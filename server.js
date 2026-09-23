@@ -239,7 +239,12 @@ async function loadJsonNumbers() {
   try {
     return JSON.parse(await fs.readFile(JSON_DB_PATH, 'utf8'));
   } catch (error) {
-    const seed = JSON.parse(await fs.readFile(VIETNAM_SEED_PATH, 'utf8'));
+    let seed = [];
+    try {
+      seed = JSON.parse(await fs.readFile(VIETNAM_SEED_PATH, 'utf8'));
+    } catch (seedError) {
+      seed = [];
+    }
     const numbers = seed.map((row, index) => ({
       id: index + 1,
       country: row.country,
