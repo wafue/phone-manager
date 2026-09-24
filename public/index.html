@@ -2,23 +2,25 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>电话号码管理系统</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📞 电话号码管理系统</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <h1>电话号码管理系统</h1>
+        <h1>📞 电话号码管理系统</h1>
 
+        <!-- 上传区域 -->
         <div class="upload-box">
-            <h3>上传Excel文件</h3>
+            <h3>📎 上传Excel文件</h3>
             <input type="file" id="excel-file" accept=".xlsx">
             <button id="upload-btn" class="btn-primary">上传导入</button>
             <span id="upload-status"></span>
         </div>
 
+        <!-- 搜索和筛选 -->
         <div class="filter-bar">
-            <input type="text" id="search-input" placeholder="模糊搜索：国家 / 地区 / 号码...">
+            <input type="text" id="search-input" placeholder="🔍 模糊搜索：国家 / 地区 / 号码...">
             <select id="status-filter">
                 <option value="all">全部状态</option>
                 <option value="未使用">未使用</option>
@@ -26,6 +28,7 @@
             </select>
         </div>
 
+        <!-- 号码表格 -->
         <div class="table-wrapper">
         <table id="phone-table">
             <thead>
@@ -43,6 +46,7 @@
         </table>
         </div>
 
+        <!-- 分页 -->
         <div class="pagination-bar">
             <div class="page-info">
                 第 <strong id="current-page">1</strong> 页 / 共 <strong id="total-pages">1</strong> 页
@@ -54,18 +58,19 @@
                     <option value="20">20 条/页</option>
                     <option value="50">50 条/页</option>
                 </select>
-                <button id="first-btn" title="首页">首页</button>
-                <button id="prev-btn" title="上一页">上一页</button>
+                <button id="first-btn" title="首页">⏮</button>
+                <button id="prev-btn" title="上一页">◀</button>
                 <span id="page-numbers"></span>
-                <button id="next-btn" title="下一页">下一页</button>
-                <button id="last-btn" title="末页">末页</button>
+                <button id="next-btn" title="下一页">▶</button>
+                <button id="last-btn" title="末页">⏭</button>
             </div>
         </div>
 
+        <!-- 统计 -->
         <div class="stats-bar">
-            <span>总计: <strong id="total-count">0</strong></span>
-            <span>未使用: <strong id="new-count">0</strong></span>
-            <span>已使用: <strong id="used-count">0</strong></span>
+            <span>📊 总计: <strong id="total-count">0</strong></span>
+            <span>✅ 未使用: <strong id="new-count">0</strong></span>
+            <span>❌ 已使用: <strong id="used-count">0</strong></span>
         </div>
     </div>
 
