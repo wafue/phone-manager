@@ -1,7 +1,12 @@
+// ==========================================
+// 电话号码管理系统
+// ==========================================
+
 let currentPage = 1;
 let pageSize = 10;
 let totalRecords = 0;
 let accessPassword = sessionStorage.getItem('accessPassword') || '';
+let activeLoadController = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
@@ -17,14 +22,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('upload-btn').addEventListener('click', handleUpload);
     document.getElementById('excel-file').addEventListener('change', handleFileSelect);
+    document.getElementById('table-body').addEventListener('click', handleTableClick);
 });
+
+// ─── 数据加载 ───────────────────────────────
 
 async function loadData() {
     const keyword = document.getElementById('search-input').value.trim();
     const status = document.getElementById('status-filter').value;
 
     const params = new URLSearchParams({ page: currentPage, pageSize, keyword, status });
-    const res = await apiFetch('/api/numbers?' + params);
+    if (activeLoadController) {
+        activeLoadController.abort();
+    }
+    activeLoadController = new AbortController();
+
+    let res;
+    try {
+        res = await apiFetch('/api/numbers?' + params, { signal: activeLoadController.signal });
+    } catch (error) {
+        if (error.name === 'AbortError') return;
+        showToast('网络错误，请稍后重试', 'error');
+        return;
+    }
+
     const json = await res.json();
 
     if (json.code !== 0) { showToast(json.message, 'error'); return; }
@@ -37,40 +58,51 @@ async function loadData() {
     updateStats(unused, used, total);
 }
 
+// ─── 渲染 ───────────────────────────────────
+
 function renderTable(list) {
     const tbody = document.getElementById('table-body');
 
     if (list.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><div class="empty-icon">暂无数据</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><div class="empty-icon">📭</div><p>暂无数据</p></td></tr>`;
         return;
     }
 
     tbody.innerHTML = list.map(item => `
         <tr class="main-row ${item.status === '已使用' ? 'row-used' : ''}" data-id="${item.id}">
-            <td class="col-index">${item.id}</td>
-            <td>${escHtml(item.country)}</td>
-            <td class="col-region">${escHtml(item.region)}</td>
-            <td><strong>${escHtml(item.number)}</strong></td>
-            <td><span class="status-badge ${item.status === '已使用' ? 'status-used' : 'status-new'}">${item.status}</span></td>
-            <td class="col-time">${escHtml(item.used_time)}</td>
+            <td class="col-index" data-label="索引">${item.id}</td>
+            <td data-label="国家">${escHtml(item.country)}</td>
+            <td class="col-region" data-label="地区">${escHtml(item.region)}</td>
+            <td data-label="号码"><strong>${escHtml(item.number)}</strong></td>
+            <td data-label="状态"><span class="status-badge ${item.status === '已使用' ? 'status-used' : 'status-new'}">${item.status === '已使用' ? '已使用' : '未使用'}</span></td>
+            <td class="col-time" data-label="使用时间">${escHtml(item.used_time)}</td>
             <td class="col-action">
                 <button class="copy-btn"
-                    onclick="event.stopPropagation(); copyAndMark(${item.id}, '${escHtml(item.number).replace(/'/g, "\\'")}')"
+                    data-action="copy"
+                    data-id="${item.id}"
+                    data-number="${escAttr(item.number)}"
                     ${item.status === '已使用' ? 'disabled' : ''}>
                     ${item.status === '已使用' ? '已复制' : '复制'}
                 </button>
             </td>
         </tr>
-        <tr class="detail-row hidden" id="detail-${item.id}">
+        <tr class="detail-row hidden" id="detail-${item.id}" aria-hidden="true">
             <td colspan="7"><strong>地区：</strong>${escHtml(item.region)} &nbsp;&nbsp; <strong>使用时间：</strong>${escHtml(item.used_time)}</td>
         </tr>
     `).join('');
+}
 
-    document.querySelectorAll('.main-row').forEach(row => {
-        row.addEventListener('dblclick', function() {
-            toggleDetail(+this.dataset.id);
-        });
-    });
+function handleTableClick(event) {
+    const copyButton = event.target.closest('[data-action="copy"]');
+    if (copyButton) {
+        copyAndMark(Number(copyButton.dataset.id), copyButton.dataset.number, copyButton);
+        return;
+    }
+
+    const row = event.target.closest('.main-row');
+    if (row) {
+        toggleDetail(Number(row.dataset.id));
+    }
 }
 
 function toggleDetail(id) {
@@ -79,8 +111,10 @@ function toggleDetail(id) {
     if (detailRow.classList.contains('hidden')) {
         document.querySelectorAll('.detail-row').forEach(r => r.classList.add('hidden'));
         detailRow.classList.remove('hidden');
+        detailRow.setAttribute('aria-hidden', 'false');
     } else {
         detailRow.classList.add('hidden');
+        detailRow.setAttribute('aria-hidden', 'true');
     }
 }
 
@@ -124,20 +158,23 @@ function goToPage(p) {
     if (p < 1 || p > tp) return;
     currentPage = p;
     loadData();
-    document.getElementById('phone-table').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('phone-table').scrollIntoView({ block: 'start' });
 }
 
-async function copyAndMark(id, number) {
-    const btn = document.querySelector(`button[onclick*="copyAndMark(${id}"]`);
-    if (btn) { btn.textContent = '复制中...'; btn.classList.add('loading'); }
+// ─── 复制 + 标记 ────────────────────────────
 
+async function copyAndMark(id, number, btn) {
+    if (btn) { btn.textContent = '复制中…'; btn.classList.add('loading'); }
+
+    // 复制
     const copied = await copyText(number);
     if (!copied) {
-        showToast('复制失败，请手动复制', 'error');
+        showToast('❌ 复制失败，请长按手动复制', 'error');
         if (btn) { btn.textContent = '复制'; btn.classList.remove('loading'); }
         return;
     }
 
+    // 标记已使用
     const res = await apiFetch(`/api/numbers/${id}/use`, { method: 'PUT' });
     const json = await res.json();
 
@@ -148,7 +185,7 @@ async function copyAndMark(id, number) {
     }
 
     loadData();
-    showToast('已复制：' + number);
+    showToast('✅ 已复制：' + number);
     if (navigator.vibrate) navigator.vibrate(50);
 }
 
@@ -166,16 +203,30 @@ function fallbackCopy(text) {
         ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
         ta.setAttribute('readonly', '');
         document.body.appendChild(ta);
-        ta.select();
-        ta.setSelectionRange(0, 999999);
+        ta.contentEditable = 'true';
+        ta.readOnly = false;
+        if (/ipad|iphone/i.test(navigator.userAgent)) {
+            const range = document.createRange();
+            range.selectNodeContents(ta);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            ta.setSelectionRange(0, 999999);
+        } else {
+            ta.select();
+            ta.setSelectionRange(0, 999999);
+        }
         try {
-            resolve(document.execCommand('copy'));
+            const ok = document.execCommand('copy');
+            resolve(ok);
         } catch (e) {
             resolve(false);
         }
         document.body.removeChild(ta);
     });
 }
+
+// ─── 上传 ──────────────────────────────────
 
 function handleFileSelect(e) {
     const file = e.target.files[0];
@@ -189,9 +240,9 @@ async function handleUpload() {
     const file = fileInput.files[0];
     const statusEl = document.getElementById('upload-status');
 
-    if (!file) { statusEl.textContent = '请先选择Excel文件'; statusEl.style.color = '#dc3545'; return; }
+    if (!file) { statusEl.textContent = '⚠️ 请先选择Excel文件'; statusEl.style.color = '#dc3545'; return; }
 
-    statusEl.textContent = '正在导入...';
+    statusEl.textContent = '⏳ 正在导入...';
     statusEl.style.color = '#ffc107';
     const btn = document.getElementById('upload-btn');
     btn.disabled = true;
@@ -204,18 +255,18 @@ async function handleUpload() {
         const res = await apiFetch('/api/numbers/upload', { method: 'POST', body: form });
         const json = await res.json();
         if (json.code === 0) {
-            statusEl.textContent = json.message;
+            statusEl.textContent = '✅ ' + json.message;
             statusEl.style.color = '#28a745';
             currentPage = 1;
             loadData();
-            showToast(json.message);
+            showToast('✅ ' + json.message);
         } else {
-            statusEl.textContent = json.message;
+            statusEl.textContent = '❌ ' + json.message;
             statusEl.style.color = '#dc3545';
             showToast(json.message, 'error');
         }
     } catch (e) {
-        statusEl.textContent = '网络错误';
+        statusEl.textContent = '❌ 网络错误';
         statusEl.style.color = '#dc3545';
     }
 
@@ -224,9 +275,15 @@ async function handleUpload() {
     fileInput.value = '';
 }
 
+// ─── 工具 ──────────────────────────────────
+
 function escHtml(s) {
     if (!s) return '';
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function escAttr(s) {
+    return escHtml(s);
 }
 
 async function apiFetch(url, options) {
@@ -269,6 +326,8 @@ function showToast(message, type) {
     type = type || 'success';
     const old = document.querySelector('.toast,.toast-overlay');
     if (old) old.remove();
+    const oldO = document.querySelector('.toast-overlay');
+    if (oldO) oldO.remove();
 
     const overlay = document.createElement('div');
     overlay.className = 'toast-overlay';
